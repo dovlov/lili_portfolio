@@ -91,7 +91,7 @@ const IMAGES = [
         description:
             "I've been at goodr for the past 2.5 years doing UX Design, Research, & Management. " +
             "My main focus at the company has been conversion rate optimization via UX changes.  " +
-            "I lead a team of designers and developers who help me execute against my hypotheses. " +
+            "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
             "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
     },
     {
@@ -323,6 +323,9 @@ let zCounter = 1;
 
 /** The one image currently flying / expanded / collapsing, or null. */
 let focused = null;
+
+/** True while the contact view is up and the portfolio is hidden behind it. */
+let contactOpen = false;
 
 /** An image clicked while another was open, waiting its turn. See focusBody(). */
 let pendingFocus = null;
@@ -1463,6 +1466,8 @@ function pickBody(px, py) {
 let press = null;
 
 function onPointerDown(event) {
+    // The portfolio is hidden behind the contact view; nothing in it is live.
+    if (contactOpen) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
 
     const body = pickBody(event.clientX, event.clientY);
@@ -1601,9 +1606,9 @@ window.addEventListener("pointercancel", onPointerUp);
 
 /** Escape closes an open image. */
 window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && focused && focused.mode === "expanded") {
-        collapseBody(focused);
-    }
+    if (event.key !== "Escape") return;
+    if (contactOpen) closeContact();
+    else if (focused && focused.mode === "expanded") collapseBody(focused);
 });
 
 /* Resizing only needs to wake the loop — step() re-reads the walls itself. */
@@ -1853,7 +1858,7 @@ function hoverTarget(clientX, clientY) {
        tooltip be showing", so one guard here switches the whole feature off:
        nothing can be shown, so nothing needs hiding, and pickBody() below
        (which reads pixels back off a canvas) never runs on a touch-drag. */
-    if (!TOOLTIPS_ENABLED) return null;
+    if (!TOOLTIPS_ENABLED || contactOpen) return null;
 
     const dragging = bodies.find((b) => b.mode === "grabbed");
     const hit = dragging || pickBody(clientX, clientY);
@@ -1918,6 +1923,95 @@ window.addEventListener("pointerleave", hideTooltip);
 window.addEventListener("blur", hideTooltip);
 
 /* ============================================================================
+ * 8.6. CONTACT VIEW
+ * ==========================================================================
+ * A view swap, not a page. Loading a separate document would tear down the
+ * simulation and re-scatter the pile, so the contact card is an overlay and
+ * the portfolio waits behind it in exactly the state it was left.
+ *
+ * All the showing and hiding is one class on <body> (see styles.css); the
+ * only work done here is standing the portfolio down on the way out, and
+ * keeping these two clicks away from the physics.
+ * ========================================================================== */
+
+const contactEl = document.getElementById("contact");
+const faceEl = document.querySelector(".site-face");
+const titleEl = document.querySelector(".site-title");
+
+function openContact() {
+    if (contactOpen) return;
+    contactOpen = true;
+
+    /* Leave the portfolio tidy. Routing this through releaseFocus() rather
+       than hiding things directly means an open image is put away by the very
+       same path that normally puts it away — including its description panel
+       — instead of a second path that could drift out of step with the first. */
+    if (focused) releaseFocus(focused);
+    hideTooltip();
+
+    document.body.classList.add("is-contact");
+    contactEl.hidden = false;
+
+    /* Hand keyboard focus over: on this view the heading is the way back, and
+       the emoji no longer exists. */
+    faceEl.removeAttribute("tabindex");
+    titleEl.setAttribute("tabindex", "0");
+    titleEl.setAttribute("role", "button");
+    titleEl.setAttribute("aria-label", "Back to portfolio");
+
+    // Let any collapse started above finish; the loop then sleeps by itself.
+    wake();
+}
+
+function closeContact() {
+    if (!contactOpen) return;
+    contactOpen = false;
+
+    document.body.classList.remove("is-contact");
+    contactEl.hidden = true;
+
+    titleEl.removeAttribute("tabindex");
+    titleEl.removeAttribute("role");
+    titleEl.removeAttribute("aria-label");
+    faceEl.setAttribute("tabindex", "0");
+
+    wake();
+}
+
+/**
+ * Wire one piece of chrome up as a button.
+ *
+ * The `stopPropagation` is the load-bearing line. Pointer input is handled on
+ * `window` and hit-tested by coordinate, so without it a click on the emoji
+ * would open the contact view AND grab whatever sticker happened to be behind
+ * it — which would then be mid-drag under a hidden stage.
+ */
+function asButton(el, action) {
+    el.addEventListener("pointerdown", (event) => event.stopPropagation());
+    el.addEventListener("click", (event) => {
+        event.preventDefault();
+        /* Also stop the CLICK, not just the pointerdown. The emoji lives
+           inside the <h1>, so without this its click bubbles straight into
+           the heading's own handler and the contact view opens and closes in
+           the same gesture. (The heading's pointer-events: none does not
+           prevent that — a child with pointer-events back on is still a valid
+           target, and the event bubbles through its ancestors regardless.) */
+        event.stopPropagation();
+        action();
+    });
+    el.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation(); // same nesting, same reason
+            action();
+        }
+    });
+}
+
+asButton(faceEl, openContact);
+asButton(titleEl, closeContact); // inert on the portfolio: pointer-events: none
+
+/* ============================================================================
  * 9. DRAG-AND-DROP (optional convenience)
  * ==========================================================================
  * Dropping image files onto the window adds them straight away, which is handy
@@ -1928,6 +2022,7 @@ window.addEventListener("blur", hideTooltip);
 let dragDepth = 0;
 
 window.addEventListener("dragenter", (event) => {
+    if (contactOpen) return;
     event.preventDefault();
     dragDepth++;
     dropHint.hidden = false;
@@ -1944,6 +2039,7 @@ window.addEventListener("dragleave", (event) => {
 });
 
 window.addEventListener("drop", async (event) => {
+    if (contactOpen) return;
     event.preventDefault();
     dragDepth = 0;
     dropHint.hidden = true;

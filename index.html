@@ -5,12 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Liliana Apodaca</title>
 
-<!-- Roboto Condensed, for the hover tooltips (script.js draws them in this
-     font at 26px/700). 400 is loaded too as a graceful fallback weight. -->
+<!--
+  Favicon. Drop favicon.ico in beside this file and it works — no other change
+  needed. The path is relative rather than "/favicon.ico" so it also resolves
+  when you open index.html straight off disk to preview.
+
+  If you later export a PNG or SVG version, add it ABOVE this line; browsers
+  take the last format they understand, and modern ones prefer SVG/PNG:
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+-->
+<link rel="icon" href="favicon.ico" sizes="any" />
+
+<!-- Roboto Condensed for the hover tooltips (script.js draws them in that
+     font at 26px/700); plain Roboto for the contact view. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
-  href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap"
+  href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap"
   rel="stylesheet"
 />
 
@@ -24,7 +36,27 @@
   screen reader — it is only pulled to the opposite corner visually, by being
   position:fixed in its own right (a fixed child escapes its parent's box).
 -->
-<h1 class="site-title">LILIANA APODACA<span class="site-face">&lt;:^~)</span></h1>
+<h1 class="site-title">LILIANA APODACA<span
+    class="site-face"
+    role="button"
+    tabindex="0"
+    aria-label="Contact"
+  >&lt;:^~)</span></h1>
+
+<!--
+  Contact view. Deliberately NOT a separate page: navigating away and back
+  would tear the simulation down and re-scatter the pile. This is an overlay,
+  and the portfolio simply hides behind it, exactly as it was left.
+-->
+<section id="contact" class="contact" aria-label="Contact" hidden>
+  <address class="contact-lines">
+    <span class="contact-line">Liliana Apodaca</span>
+    <a class="contact-line" href="mailto:lili.s.apodaca@gmail.com"
+      >lili.s.apodaca@gmail.com</a
+    >
+    <a class="contact-line" href="tel:+14158470494">1-415-847-0494</a>
+  </address>
+</section>
 
 <!--
   Every image becomes a <canvas class="sticker"> appended in here by script.js.

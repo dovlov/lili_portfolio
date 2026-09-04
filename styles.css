@@ -40,7 +40,11 @@ body {
     position: fixed;
     top: 34px;
     left: 40px;
-    z-index: 0; /* stickers sit above it */
+    /* Deliberately NO z-index. Stickers still cover the name — they carry
+       positive z-indexes, which beat this element's `auto` — but leaving it
+       `auto` also means the heading does not open a stacking context, so the
+       emoji inside it is free to set its own z-index against the page rather
+       than being trapped underneath the heading's. */
     margin: 0;
     font-size: 30px;
     font-weight: 700;
@@ -52,13 +56,36 @@ body {
 
 /* The face, pinned to the opposite corner. Still a child of the <h1> for
    semantics; `position: fixed` takes it out of the heading's flow entirely,
-   so the two read as one name but sit at either end of the screen. */
+   so the two read as one name but sit at either end of the screen.
+
+   Unlike the name, this one IS a control — it opens the contact view — so it
+   takes pointer events back. script.js stops those events reaching the
+   physics, which hit-tests by coordinate and would otherwise grab whatever
+   sticker happened to be sitting behind the emoji. */
 .site-face {
     position: fixed;
     top: 34px;
     right: 40px;
     left: auto;
-    pointer-events: none;
+    /* Above everything, including an expanded image and its panel. It is the
+       site's one piece of navigation, so a thrown sticker landing in the
+       corner must never be able to bury it. */
+    z-index: 6001;
+    pointer-events: auto;
+    cursor: pointer;
+    color: var(--ink);
+    /* The hover tell. */
+    transition: color 300ms ease;
+    /* Grows the tap target by 10px on every side without moving the glyph:
+       the negative margin pulls the box back out by exactly what the padding
+       pushed it in, so the text still sits at top 34 / right 40. */
+    padding: 10px;
+    margin: -10px;
+}
+
+.site-face:hover,
+.site-face:focus-visible {
+    color: #ff0000;
 }
 
 /* Narrow screens: the name and the face are heading for each other, so pull
@@ -75,6 +102,91 @@ body {
     .site-face {
         right: 20px;
     }
+}
+
+/* --------------------------------------------------------------------------
+   Contact view
+   --------------------------------------------------------------------------
+   A view swap rather than a page: script.js adds `is-contact` to <body>,
+   which hides the portfolio and turns the header into the way back.
+   -------------------------------------------------------------------------- */
+
+.contact {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    /* The flex centring places the BLOCK in the middle of the window; the
+       lines inside stay left-aligned, so they read as a list rather than as
+       a centred poem. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+}
+
+/* Beats `.contact` on specificity, so no !important is needed to re-hide it. */
+.contact[hidden] {
+    display: none;
+}
+
+.contact-lines {
+    text-align: left;
+    font-family: "Roboto", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* Reading your "14pt" the same way as the 4pt stroke and the 26pt tooltip
+       — as CSS px. For true typographic 14pt, write `14pt`; it renders at
+       about 18.7px. */
+    font-size: 14px;
+    font-style: normal; /* <address> italicises by default */
+    line-height: 1.7;
+    color: var(--ink);
+    /* Let people select and copy the details. */
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.contact-line {
+    display: block; /* one per line */
+}
+
+a.contact-line {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 300ms ease;
+}
+
+/* Same red as the emoji, so "interactive" reads as one idea across the site. */
+a.contact-line:hover,
+a.contact-line:focus-visible {
+    color: #ff0000;
+}
+
+/* ---- What the contact view hides, and what it turns on ---- */
+
+body.is-contact .stage,
+body.is-contact .site-face,
+body.is-contact .desc,
+body.is-contact .tooltip {
+    display: none;
+}
+
+/* On the portfolio the heading must never swallow a pointerdown. Here it is
+   the only way back, so it becomes the one thing that does — which also means
+   lifting it above the overlay, or the overlay would both cover it and
+   swallow the click meant for it. */
+body.is-contact .site-title {
+    z-index: 4001;
+    pointer-events: auto;
+    cursor: pointer;
+    /* Same tell as the emoji, and scoped to this view on purpose: on the
+       portfolio the heading is inert, so colouring it on hover there would
+       advertise a click that does nothing. */
+    transition: color 300ms ease;
+}
+
+body.is-contact .site-title:hover,
+body.is-contact .site-title:focus-visible {
+    color: #ff0000;
 }
 
 /* --------------------------------------------------------------------------
