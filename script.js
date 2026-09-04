@@ -70,7 +70,7 @@ const IMAGES = [
         src: "slime_1.webp",
         label: "THE SLIME MOLD HOLD",
         description:
-            "A card came I created with accompanying character & map bits. " +
+            "A card game I created with accompanying character & map bits. " +
             "This game began as an exploration into a fascination of mine: the " +
             "slime mold. I developed a sprawling & evolving card game which " +
             "branches out from central nodes. This design was meant to mimic the " +
@@ -106,7 +106,7 @@ const IMAGES = [
         src: "sb.png",
         label: "STRONG BABY PRODUCTIONS",
         description:
-            "As a part of my work with Dolphin.Limited I joined the team creating, and spearheaded the design of, " +
+            "As a part of my work with Dolphin.Limited I joined the team creating and spearheaded the design of " +
             "Jonah Hill’s Strong Baby Productions web platform. The web platform serves as a hub for media and news " +
 	    "about past and upcoming films. It also hosts a bespoke shopping experience: offering a line of street wear to users.",
     },
