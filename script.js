@@ -91,7 +91,7 @@ const IMAGES = [
         description:
             "I've been at goodr for the past 2.5 years doing UX Design, Research, & Management. " +
             "My main focus at the company has been conversion rate optimization via UX changes.  " +
-            "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
+            "I lead a team of designers and developers who help me execute against my hypotheses. " +
             "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
     },
     {
