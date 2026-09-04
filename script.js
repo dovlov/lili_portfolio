@@ -85,7 +85,8 @@ const IMAGES = [
         label: "THE SLIME MOLD HOLD",
         // ↓ placeholder — swap in the real copy for this piece.
         description:
-            "Packaging and print work for the same world.",
+            "Packaging and print work for the same world. Replace this text " +
+            "with the description you want under this piece.",
     },
 ];
 
@@ -106,6 +107,10 @@ const CONFIG = {
        will (deliberately) do nothing. */
     mobileBreakpoint: 700, // px of window width at load…
     mobileSpawnScale: 0.5, // …under which images spawn at half their usual size
+    /* Hover tooltips are a desktop affordance: a phone has no hover, so they
+       only ever surface mid-drag, which reads as clutter rather than as a
+       label. Set true to bring them back on small screens. */
+    mobileTooltips: false,
 
     /* ---- Motion (the demo's sliders) ---- */
     gravity: 0.5, // px/frame². Demo equivalent: g * tilt.y = 3 * 0.1
@@ -189,7 +194,7 @@ const CONFIG = {
         letterSpacing: "normal",
         // The box is CENTRED on the cursor horizontally; this is the clear
         // space between the cursor and the box's top edge.
-        cursorGap: 24,
+        cursorGap: 28,
         edgeMargin: 12, // never rendered closer than this to a window edge
     },
 };
@@ -258,6 +263,9 @@ const SPAWN_SCALE = IS_SMALL_SCREEN ? CONFIG.mobileSpawnScale : 1;
 
 /** Gap between an expanded image and its description panel. */
 const DESC_GAP = IS_SMALL_SCREEN ? CONFIG.descGapMobile : CONFIG.descGap;
+
+/** Whether hover tooltips run at all this session. See CONFIG.mobileTooltips. */
+const TOOLTIPS_ENABLED = !IS_SMALL_SCREEN || CONFIG.mobileTooltips;
 
 /** Panel width ceiling, as a fraction of the window. */
 const DESC_MAX_WIDTH_FRACTION = IS_SMALL_SCREEN
@@ -1579,6 +1587,9 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", wake
  *      `labelFadeMs`). Nothing is legible mid-animation; the words arrive on
  *      a box that has already settled.
  *
+ * DESKTOP ONLY. A phone has no hover, so these would only ever appear
+ * mid-drag — see CONFIG.mobileTooltips and the guard in hoverTarget().
+ *
  * LIFECYCLE: one reveal per visit to an image. The sequence starts when the
  * cursor crosses into an image and does not restart, reset, or disappear
  * until the cursor leaves that image again — pressing, dragging and throwing
@@ -1797,6 +1808,12 @@ function hideTooltip() {
  * across the screen; the drag itself is the better evidence of intent.
  */
 function hoverTarget(clientX, clientY) {
+    /* Off on phones. This is the single chokepoint for "what should the
+       tooltip be showing", so one guard here switches the whole feature off:
+       nothing can be shown, so nothing needs hiding, and pickBody() below
+       (which reads pixels back off a canvas) never runs on a touch-drag. */
+    if (!TOOLTIPS_ENABLED) return null;
+
     const dragging = bodies.find((b) => b.mode === "grabbed");
     const hit = dragging || pickBody(clientX, clientY);
     if (!hit || !hit.label) return null;
