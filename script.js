@@ -68,22 +68,31 @@
 const IMAGES = [
     {
         src: "slime_1.webp",
-        label: "SLIME COLLECTIVE",
+        label: "THE SLIME MOLD HOLD",
         description:
-            "A card came I created with accompanying character and map bits. " +
+            "A card came I created with accompanying character & map bits. " +
             "This game began as an exploration into a fascination of mine: the " +
-            "slime mold. I developed a sprawling and evolving card game which " +
-            "would branch out from central nodes. This design was meant to mimic the " +
-            "growth and spread of slime molds.",
+            "slime mold. I developed a sprawling & evolving card game which " +
+            "branches out from central nodes. This design was meant to mimic the " +
+            "growth & spread of the slime mold.",
     },
     {
         src: "pleina.png",
         label: "PLEINA – AN IOS APP",
         description:
-            "Pleina is a functioning AI planning app for IOS that I designed and developed. " +
-            "Users fill out an interest profile, enter a prompt, and the app generates step " +
+            "Pleina is a functioning AI planning app for IOS that I designed & developed. " +
+            "Users fill out an interest profile, enter a prompt, & the app generates step " +
 	    "by step instructions, with accompanying directions produced via an integrated map API, " +
 	    "to help Users accomplish their request or meet their goal.",
+    },
+    {
+        src: "goodr.png",
+        label: "goodr – UX MANAGEMENT",
+        description:
+            "I've been at goodr for the past 2.5 years doing UX Design, Research, & Management. " +
+            "My main focus at the company has been conversion rate optimization via UX changes.  " +
+	    "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
+	    "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
     },
 ];
 
