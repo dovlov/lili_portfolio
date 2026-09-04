@@ -44,13 +44,29 @@
 /* ============================================================================
  * 1. YOUR IMAGES  ←— this is the only part you need to edit
  * ==========================================================================
- * Drop an image file into this folder, then add its filename to this list.
- * Each entry appears exactly once. png / jpg / webp / gif / svg all work.
+ * Drop an image file into this folder, then add it to this list. Each entry
+ * appears exactly once. png / jpg / webp / gif / svg all work.
+ *
+ * Two ways to write an entry:
+ *   "filename.webp"                          — no hover tooltip
+ *   { src: "filename.webp", label: "TITLE" }  — hovering the thumbnail shows
+ *                                                a tooltip reading TITLE
+ *
+ * Want a tooltip that looks different from the rest (bigger text, a tighter
+ * fade, different padding) for just ONE image? Add a `tooltip` object — any
+ * field you include there overrides that same field in CONFIG.tooltip below,
+ * for this image only:
+ *
+ *   { src: "big-piece.webp", label: "THE BIG PIECE",
+ *     tooltip: { fontSize: 32, padH: 12 } }
  *
  * (You can also just drag image files onto the page to try them out, but
  * those are temporary and vanish on reload — add them here to keep them.)
  */
-const IMAGES = ["slime_1.webp", "slime_2.webp"];
+const IMAGES = [
+    { src: "slime_1.webp", label: "SLIME COLLECTIVE" },
+    { src: "slime_2.webp", label: "THE SLIME MOLD HOLD" },
+];
 
 /* ============================================================================
  * 2. TUNING
@@ -96,6 +112,41 @@ const CONFIG = {
     restitutionCutoff: 1.6, // slow contacts don't bounce (kills stack jitter)
     penetrationSlop: 0.5, // allowed overlap, px
     correction: 0.8, // fraction of penetration resolved per pass
+
+    /* ---- Hover tooltip ----
+       Per-image overrides: give an IMAGES entry a `tooltip: {...}` object
+       (see section 1) with any of these same keys to change just that
+       image's tooltip. Everything it doesn't mention still comes from here. */
+    tooltip: {
+        size: 50, // px — the blank square's side length, AND the box's
+        //             height for the rest of the hover (only width animates)
+        fadeMs: 300, // stage 1: opacity 0 → 1, at the fixed `size`
+        growMs: 220, // stage 2: width animates from `size` out to hug the text,
+        //              growing equally to the left and right of the cursor
+        labelFadeMs: 200, // stage 3: the label fades in, once growing has STOPPED
+        growEasing: "cubic-bezier(0.22, 1, 0.36, 1)", // a gentle overshoot-free ease-out
+        padH: 8, // horizontal padding, px, EACH side (so text sits padH from both edges)
+        // Vertical padding, px, each side. NOT independently animated or
+        // enforced as literal CSS padding — the box's height is fixed at
+        // `size` above (see the module header in section 8.5 for why), and
+        // the text is centred inside it, which at the DEFAULT size/fontSize
+        // works out to ~8px top and bottom. This value exists so the math is
+        // documented; if you customize `fontSize` or `size` for one image,
+        // adjust the other to keep ~8px of breathing room top and bottom.
+        padV: 8,
+        borderWidth: 2, // the 2pt stroke
+        fill: "#ffffff",
+        stroke: "#000000",
+        textColor: "#000000",
+        fontFamily: '"Roboto Condensed", "Arial Narrow", sans-serif',
+        fontWeight: 700,
+        fontSize: 26, // px
+        letterSpacing: "normal",
+        // The box is CENTRED on the cursor horizontally; this is the clear
+        // space between the cursor and the box's top edge.
+        cursorGap: 16,
+        edgeMargin: 12, // never rendered closer than this to a window edge
+    },
 };
 
 /** z-index band for the one expanded image. Everything else counts up from 1. */
@@ -354,7 +405,7 @@ function writeTransform(body) {
  * Width is random within CONFIG; height comes from the natural aspect ratio,
  * so the image is never distorted.
  */
-function addBody(img) {
+function addBody(img, opts) {
     const targetW = Math.round(rand(CONFIG.minWidth, CONFIG.maxWidth));
     const ratio = img.naturalHeight / img.naturalWidth || 1;
     const targetH = Math.round(targetW * ratio);
@@ -362,6 +413,20 @@ function addBody(img) {
     const body = {
         img, // kept for re-baking at expanded size
         ratio,
+
+        /* Hover tooltip. `label` of null means this image just has no
+           tooltip. `tooltipCfg` is CONFIG.tooltip with this image's own
+           `tooltip: {...}` overrides (if any) merged on top — see section 1.
+           `tooltipWidth` is filled in lazily, on the first hover, by
+           measureTooltipWidth(): most images are never hovered in a given
+           visit, so there is no reason to pay for a DOM measurement at
+           load time for every single one. */
+        label: (opts && opts.label) || null,
+        tooltipCfg:
+            opts && opts.label
+                ? Object.assign({}, CONFIG.tooltip, opts.tooltip || {})
+                : null,
+        tooltipWidth: null,
         el: null,
         ctx: null,
         dpr: 1,
@@ -1121,6 +1186,12 @@ function onPointerDown(event) {
     // halfway just produces states nobody asked for.
     if (isBusy(body)) return;
 
+    // A press — whether it turns into a drag or a click — always ends any
+    // tooltip that was showing. Doing it here (rather than waiting for the
+    // next pointermove) means it disappears the instant you press, not one
+    // frame later.
+    hideTooltip();
+
     event.preventDefault();
 
     press = {
@@ -1249,6 +1320,244 @@ window.addEventListener("orientationchange", wake);
 if (window.visualViewport) window.visualViewport.addEventListener("resize", wake);
 
 /* ============================================================================
+ * 8.5. HOVER TOOLTIP
+ * ==========================================================================
+ * Three-stage reveal, per spec:
+ *   1. a blank `size`×`size` white box with a black stroke fades in (opacity
+ *      only, over `fadeMs`), centred on the cursor with its top edge
+ *      `cursorGap` below it — see CONFIG.tooltip.
+ *   2. the instant that fade finishes, the box's WIDTH animates out (over
+ *      `growMs`) to hug the label at `padH` of padding on each side. It grows
+ *      SYMMETRICALLY: equally to the left and to the right, with its centre
+ *      staying under the cursor throughout. That centring is done in CSS with
+ *      `transform: translateX(-50%)` on the box — see styles.css — so no JS
+ *      runs per frame to maintain it.
+ *   3. only once the box has stopped moving does the label fade in (over
+ *      `labelFadeMs`). Nothing is legible mid-animation; the words arrive on
+ *      a box that has already settled.
+ *
+ * This module is deliberately independent of the physics loop in section 7:
+ * position tracks the cursor via a plain `pointermove` listener, and both
+ * animation stages are CSS transitions sequenced with setTimeout. That means
+ * hovering still works even while the pile has gone to sleep (see wake() /
+ * sleep()), and costs nothing at all when nobody is hovering anything.
+ * ========================================================================== */
+
+// One element, reused for every image — only one tooltip is ever on screen.
+const tooltipEl = document.createElement("div");
+tooltipEl.className = "tooltip";
+tooltipEl.hidden = true;
+const tooltipBox = document.createElement("div");
+tooltipBox.className = "tooltip-box";
+const tooltipLabel = document.createElement("span");
+tooltipLabel.className = "tooltip-label";
+tooltipBox.appendChild(tooltipLabel);
+tooltipEl.appendChild(tooltipBox);
+document.body.appendChild(tooltipEl);
+
+// A second, invisible element used only to measure label text. Sharing the
+// real tooltip's font settings via inline styles (set per-body, since a
+// label's font can be overridden per image) keeps the measurement exact.
+const measurer = document.createElement("span");
+measurer.style.cssText =
+    "position:fixed; left:-9999px; top:-9999px; visibility:hidden; white-space:nowrap;";
+document.body.appendChild(measurer);
+
+let hoveredBody = null; // the body currently under the cursor, or null
+let tooltipVisible = false; // true from the start of the fade-in to the end of the fade-out
+let growTimer = null; // pending "stage 1 finished, start stage 2" timeout
+let labelTimer = null; // pending "stage 2 finished, start stage 3" timeout
+let hideTimer = null; // pending "fade-out finished, actually hide" timeout
+
+/**
+ * The pixel width the box needs to fully show `body.label`, never smaller
+ * than the blank square it starts as. Computed once per body and cached on
+ * it — most images are never hovered in a given visit, so this is paid for
+ * lazily rather than for all of them at load time.
+ */
+function measureTooltipWidth(body) {
+    if (body.tooltipWidth !== null) return body.tooltipWidth;
+    const cfg = body.tooltipCfg;
+
+    measurer.style.fontFamily = cfg.fontFamily;
+    measurer.style.fontWeight = cfg.fontWeight;
+    measurer.style.fontSize = cfg.fontSize + "px";
+    measurer.style.letterSpacing = cfg.letterSpacing;
+    measurer.textContent = body.label;
+
+    // Border-box width: text + padding on both sides + the stroke itself.
+    const target =
+        measurer.getBoundingClientRect().width +
+        cfg.padH * 2 +
+        cfg.borderWidth * 2;
+
+    body.tooltipWidth = Math.max(cfg.size, Math.ceil(target));
+    return body.tooltipWidth;
+}
+
+/**
+ * Put the tooltip directly under the cursor, clamped so it never runs
+ * off-window.
+ *
+ * What this writes is the cursor's OWN x, not a left edge — the box shifts
+ * itself left by half its own width in CSS (`transform: translateX(-50%)`),
+ * which is what keeps its centre pinned to the cursor while it grows.
+ */
+function positionTooltip(body, clientX, clientY) {
+    const cfg = body.tooltipCfg;
+    const w = measureTooltipWidth(body);
+    const h = cfg.size;
+
+    /* Clamp against the FINAL width rather than the current one. Near a window
+       edge the box has to give up dead-centring to stay on screen, and using
+       the final width means it settles into that compromise before it starts
+       growing — otherwise it would slide sideways mid-growth as the widening
+       box ran into the edge. */
+    const half = w / 2;
+    const minX = cfg.edgeMargin + half;
+    const maxX = window.innerWidth - cfg.edgeMargin - half;
+    // A label wider than the window can't satisfy both margins: centre it.
+    const cx = minX > maxX ? window.innerWidth / 2 : clamp(clientX, minX, maxX);
+
+    const maxTop = Math.max(cfg.edgeMargin, window.innerHeight - h - cfg.edgeMargin);
+    const top = clamp(clientY + cfg.cursorGap, cfg.edgeMargin, maxTop);
+
+    tooltipEl.style.transform = "translate3d(" + cx + "px," + top + "px,0)";
+}
+
+/** Begin the two-stage reveal for `body`, positioned at the current cursor. */
+function showTooltip(body, clientX, clientY) {
+    hoveredBody = body;
+    tooltipVisible = true;
+    clearTimeout(growTimer);
+    clearTimeout(labelTimer);
+    clearTimeout(hideTimer);
+
+    const cfg = body.tooltipCfg;
+
+    // Apply this image's tooltip config (defaults, or its own overrides —
+    // see the `tooltip:` field on an IMAGES entry) to the shared element.
+    // These go through custom properties rather than inline transition
+    // shorthands: an inline `transitionTimingFunction` would override the
+    // per-property easings in the stylesheet all at once, so the opacity
+    // fade would silently inherit the width curve.
+    tooltipBox.style.setProperty("--tooltip-fade-ms", cfg.fadeMs + "ms");
+    tooltipBox.style.setProperty("--tooltip-grow-ms", cfg.growMs + "ms");
+    tooltipBox.style.setProperty("--tooltip-grow-ease", cfg.growEasing);
+    tooltipLabel.style.setProperty(
+        "--tooltip-label-fade-ms",
+        cfg.labelFadeMs + "ms"
+    );
+    tooltipBox.style.background = cfg.fill;
+    tooltipBox.style.borderColor = cfg.stroke;
+    tooltipBox.style.borderWidth = cfg.borderWidth + "px";
+    tooltipBox.style.paddingLeft = cfg.padH + "px";
+    tooltipBox.style.paddingRight = cfg.padH + "px";
+    tooltipBox.style.height = cfg.size + "px";
+    tooltipLabel.textContent = body.label;
+    tooltipLabel.style.color = cfg.textColor;
+    tooltipLabel.style.fontFamily = cfg.fontFamily;
+    tooltipLabel.style.fontWeight = cfg.fontWeight;
+    tooltipLabel.style.fontSize = cfg.fontSize + "px";
+    tooltipLabel.style.letterSpacing = cfg.letterSpacing;
+
+    /* Reset to the blank-square starting state with transitions switched off,
+       so this jump — which may be undoing a previous hover's grown width and
+       faded-in label — is instant and invisible rather than being tweened. */
+    tooltipBox.classList.remove("is-growing", "is-visible");
+    tooltipLabel.classList.remove("is-visible");
+    tooltipBox.style.transition = "none";
+    tooltipLabel.style.transition = "none";
+    tooltipBox.style.width = cfg.size + "px";
+
+    tooltipEl.hidden = false;
+    positionTooltip(body, clientX, clientY);
+
+    // Force the browser to commit the state above before transitions are
+    // switched back on, or it would tween FROM whatever the box looked like
+    // a moment ago instead of snapping to blank first.
+    void tooltipBox.offsetWidth;
+    tooltipBox.style.transition = "";
+    tooltipLabel.style.transition = "";
+
+    // Stage 1: fade the blank box in. One rAF late, so the "remove is-visible"
+    // above and this "add it back" are never coalesced into a no-op.
+    requestAnimationFrame(() => {
+        if (hoveredBody !== body) return; // moved to something else already
+        tooltipBox.classList.add("is-visible");
+    });
+
+    /* Stage 2 begins only once stage 1 has actually finished, and stage 3 only
+       once stage 2 has. Chaining on wall-clock time rather than `transitionend`
+       keeps all three stages predictable even if a transition is interrupted
+       or never fires (an off-screen or display:none element emits nothing). */
+    growTimer = setTimeout(() => {
+        if (hoveredBody !== body) return;
+        tooltipBox.classList.add("is-growing");
+        tooltipBox.style.width = measureTooltipWidth(body) + "px";
+    }, cfg.fadeMs);
+
+    // Stage 3: the label, only after the box has stopped moving.
+    labelTimer = setTimeout(() => {
+        if (hoveredBody !== body) return;
+        tooltipLabel.classList.add("is-visible");
+    }, cfg.fadeMs + cfg.growMs);
+}
+
+/** End the reveal — a quick opacity fade back out, then park off-screen. */
+function hideTooltip() {
+    if (!tooltipVisible) {
+        hoveredBody = null;
+        return;
+    }
+    const cfg = (hoveredBody && hoveredBody.tooltipCfg) || CONFIG.tooltip;
+    hoveredBody = null;
+    tooltipVisible = false;
+    clearTimeout(growTimer);
+    clearTimeout(labelTimer);
+
+    /* Only the BOX's opacity is touched. The label keeps whatever opacity it
+       had and fades out inside its parent, so the whole thing leaves as one
+       object — fading the label separately would make the words vanish first
+       and leave an empty box behind. showTooltip() resets it for next time. */
+    tooltipBox.classList.remove("is-visible", "is-growing");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+        if (!tooltipVisible) tooltipEl.hidden = true;
+    }, cfg.fadeMs);
+}
+
+/**
+ * Runs on every pointer move, independently of dragging. Hovering only ever
+ * shows a tooltip when NOTHING is currently pressed: mid-drag or mid-flight,
+ * anything the cursor passes over is being shoved aside, not being looked
+ * at, and its tooltip would just be noise.
+ */
+function onHoverMove(event) {
+    if (press) {
+        if (hoveredBody) hideTooltip();
+        return;
+    }
+
+    const hit = pickBody(event.clientX, event.clientY);
+    const target = hit && hit.mode === "free" && hit.label ? hit : null;
+
+    if (target === hoveredBody) {
+        if (target) positionTooltip(target, event.clientX, event.clientY);
+        return;
+    }
+
+    if (target) showTooltip(target, event.clientX, event.clientY);
+    else hideTooltip();
+}
+
+window.addEventListener("pointermove", onHoverMove, { passive: true });
+// Leaving the browser window entirely, or switching tabs/apps: don't leave a
+// tooltip hanging that no `pointermove` will ever arrive to clear.
+window.addEventListener("pointerleave", hideTooltip);
+window.addEventListener("blur", hideTooltip);
+
+/* ============================================================================
  * 9. DRAG-AND-DROP (optional convenience)
  * ==========================================================================
  * Dropping image files onto the window adds them straight away, which is handy
@@ -1307,10 +1616,12 @@ async function init() {
     WORLD.prevW = WORLD.w;
     WORLD.prevH = WORLD.h;
 
-    for (const src of IMAGES) {
+    for (const entry of IMAGES) {
+        // An entry is either a bare filename, or { src, label, tooltip }.
+        const src = typeof entry === "string" ? entry : entry.src;
         try {
             const img = await loadImage(src);
-            addBody(img);
+            addBody(img, typeof entry === "string" ? null : entry);
         } catch (err) {
             console.warn(
                 'Could not load "' +

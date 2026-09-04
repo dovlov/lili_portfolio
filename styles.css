@@ -21,7 +21,7 @@ body {
     height: 100%;
     margin: 0;
     overflow: hidden; /* the window IS the world — never scroll it */
-    background: #FAFAFA;
+    background: var(--paper);
     color: var(--ink);
     font-family: "Helvetica Neue", Helvetica, Arial, -apple-system,
         BlinkMacSystemFont, sans-serif;
@@ -92,6 +92,86 @@ body {
    shouldn't advertise otherwise. */
 .sticker.is-busy {
     cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Hover tooltip
+   --------------------------------------------------------------------------
+   Three-stage reveal, sequenced by script.js:
+     1. A blank 50×50 white square fades in (opacity, 300ms), centred on the
+        cursor with its top edge `cursorGap` below it.
+     2. Its WIDTH animates out to hug the label — symmetrically, growing
+        equally left and right, with its centre staying under the cursor.
+     3. Only once it has finished growing does the label itself fade in.
+   Height never animates, so the growth reads as purely horizontal.
+   -------------------------------------------------------------------------- */
+
+.tooltip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 6000; /* above every sticker, including the expanded one */
+    /* Never the target of a hit-test — it must not be able to block the
+       cursor from the image it's labelling, or steal a click/drag. */
+    pointer-events: none;
+    /* The wrapper is translated to the CURSOR's x and the box's top y; the
+       box below offsets itself horizontally. See positionTooltip(). */
+    will-change: transform;
+}
+
+.tooltip-box {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center; /* vertical centring ≈ the 8px top/bottom padding */
+    justify-content: center; /* so a clipped label is clipped symmetrically */
+    overflow: hidden; /* the label can never force the box wider */
+    white-space: nowrap;
+    background: #ffffff;
+    border: 2px solid #000000; /* the 2pt stroke */
+    opacity: 0;
+
+    /* ---- THE CENTRING TRICK ----
+       The wrapper sits exactly under the cursor; this shifts the box left by
+       half of its OWN width. A percentage inside `transform` resolves against
+       the element's current border box, so while `width` is being animated the
+       browser re-resolves this every frame — the box grows out to the left and
+       the right in equal measure and its centre stays pinned to the cursor,
+       with no per-frame JavaScript keeping it there.
+
+       `transform` is deliberately NOT in the transition list below: it must
+       track the width instantly, not lag behind it. */
+    transform: translateX(-50%);
+
+    /* `width` is a literal px value written by script.js — transitions on
+       width only work against concrete px targets, never against "auto". */
+    transition: opacity var(--tooltip-fade-ms, 300ms) ease;
+}
+
+.tooltip-box.is-visible {
+    opacity: 1;
+}
+
+.tooltip-box.is-growing {
+    transition: opacity var(--tooltip-fade-ms, 300ms) ease,
+        width var(--tooltip-grow-ms, 220ms)
+            var(--tooltip-grow-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.tooltip-label {
+    /* font-size / font-family / font-weight are all set inline by
+       script.js from CONFIG.tooltip, so a per-image override (see
+       IMAGES in script.js) is guaranteed to render exactly as measured. */
+    color: #000000;
+    line-height: 1;
+    /* Stage 3. The label stays invisible through the fade AND the grow, so
+       what you see expanding is a clean empty box; the words arrive only
+       once it has stopped moving. */
+    opacity: 0;
+    transition: opacity var(--tooltip-label-fade-ms, 200ms) ease;
+}
+
+.tooltip-label.is-visible {
+    opacity: 1;
 }
 
 /* --------------------------------------------------------------------------
