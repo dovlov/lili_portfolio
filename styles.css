@@ -69,7 +69,21 @@ body {
     /* Everything is driven from transform, so the browser can skip layout. */
     transform: translate3d(0, 0, 0);
     will-change: transform;
-    cursor: grab;
+
+    /* CLICKABILITY IS THE MESSAGE. An image opens when you click it; being
+       able to throw it around is a bonus you discover by trying. A `grab`
+       cursor advertises the bonus and hides the point, so every state that
+       accepts a click says `pointer` — including while you're mid-drag.
+       (Want the closed fist back while dragging? Set `cursor: grabbing` on
+       .is-held below.)
+
+       This is left to CSS rather than being driven from the hover code in
+       script.js on purpose: images here are constantly moving UNDER a
+       stationary cursor — falling, bouncing, being shoved — and CSS updates
+       the cursor for that automatically, where JS would need a pointermove
+       that never comes. */
+    cursor: pointer;
+
     /* Required: without this, a touch-drag scrolls the page instead. */
     touch-action: none;
     -webkit-user-drag: none;
@@ -79,7 +93,7 @@ body {
 }
 
 .sticker.is-held {
-    cursor: grabbing;
+    cursor: pointer;
 }
 
 /* The one expanded image: a second click (or Escape, or a click on the

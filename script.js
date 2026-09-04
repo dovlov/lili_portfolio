@@ -568,6 +568,11 @@ function releaseFocus(body) {
  * movements read as a sequence rather than a scuffle.
  */
 function focusBody(body) {
+    /* The one thing other than the cursor leaving that ends a tooltip: this
+       image is no longer a thumbnail in the pile, it's on its way to the
+       centre to be looked at properly. */
+    if (hoveredBody === body) hideTooltip();
+
     const handingOver = focused && focused !== body;
     if (handingOver) releaseFocus(focused);
 
@@ -1079,6 +1084,10 @@ function step(now) {
         if (Math.abs(body.vx) > 0.01 || Math.abs(body.vy) > 0.01) moving = true;
     }
 
+    /* Bodies have all moved by now, so this is the moment to ask whether the
+       image the cursor was on has slid out from under it. See section 8.5. */
+    checkHoverStillValid();
+
     render();
 
     const worldStill = WORLD.w === WORLD.prevW && WORLD.h === WORLD.prevH;
@@ -1186,11 +1195,11 @@ function onPointerDown(event) {
     // halfway just produces states nobody asked for.
     if (isBusy(body)) return;
 
-    // A press — whether it turns into a drag or a click — always ends any
-    // tooltip that was showing. Doing it here (rather than waiting for the
-    // next pointermove) means it disappears the instant you press, not one
-    // frame later.
-    hideTooltip();
+    /* NOTE: a press deliberately does NOT touch the tooltip. It belongs to
+       "the cursor is on this image", and pressing, dragging or throwing does
+       not change that — the reveal plays once per visit and rides out the
+       whole gesture. It ends when the cursor leaves (onHoverMove /
+       checkHoverStillValid) or when the image leaves the pile (focusBody). */
 
     event.preventDefault();
 
@@ -1336,11 +1345,27 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", wake
  *      `labelFadeMs`). Nothing is legible mid-animation; the words arrive on
  *      a box that has already settled.
  *
- * This module is deliberately independent of the physics loop in section 7:
- * position tracks the cursor via a plain `pointermove` listener, and both
- * animation stages are CSS transitions sequenced with setTimeout. That means
- * hovering still works even while the pile has gone to sleep (see wake() /
- * sleep()), and costs nothing at all when nobody is hovering anything.
+ * LIFECYCLE: one reveal per visit to an image. The sequence starts when the
+ * cursor crosses into an image and does not restart, reset, or disappear
+ * until the cursor leaves that image again — pressing, dragging and throwing
+ * all happen underneath a tooltip that just keeps sitting there. Two things
+ * make that hold:
+ *
+ *   - A DRAG LOCKS THE TOOLTIP to the image being dragged, without
+ *     hit-testing. Rule 5's chase means a dragged image LAGS the cursor, so
+ *     a quick drag routinely leaves the pointer outside the very image it is
+ *     holding; hit-testing alone would strobe the tooltip off and on for the
+ *     whole gesture.
+ *   - THE HOVER IS RE-CHECKED FROM THE PHYSICS LOOP as well as from
+ *     pointermove, because an image can leave a stationary cursor rather than
+ *     the other way round — you drop one and it falls away. See
+ *     checkHoverStillValid().
+ *
+ * Otherwise this module is independent of the physics loop in section 7:
+ * position tracks the cursor via a plain `pointermove` listener, and all
+ * three animation stages are CSS transitions sequenced with setTimeout. So
+ * hovering still works while the pile is asleep (see wake() / sleep()), and
+ * costs nothing at all when nobody is hovering anything.
  * ========================================================================== */
 
 // One element, reused for every image — only one tooltip is ever on screen.
@@ -1528,20 +1553,42 @@ function hideTooltip() {
 }
 
 /**
- * Runs on every pointer move, independently of dragging. Hovering only ever
- * shows a tooltip when NOTHING is currently pressed: mid-drag or mid-flight,
- * anything the cursor passes over is being shoved aside, not being looked
- * at, and its tooltip would just be noise.
+ * Which image the cursor counts as being "on" right now, or null.
+ *
+ * While something is being dragged, that image IS the answer, full stop — no
+ * hit-test. Rule 5 steers a dragged image toward the cursor rather than
+ * pinning it there, so it trails behind during a fast drag and the pointer
+ * ends up outside it for stretches of the gesture. Asking the hit-test in
+ * that situation produces a tooltip that flickers off and on all the way
+ * across the screen; the drag itself is the better evidence of intent.
+ */
+function hoverTarget(clientX, clientY) {
+    const dragging = bodies.find((b) => b.mode === "grabbed");
+    const hit = dragging || pickBody(clientX, clientY);
+    if (!hit || !hit.label) return null;
+    // Thumbnails only. An image on its way to (or sitting at) the centre has
+    // left the pile and is no longer something you're browsing past.
+    return hit.mode === "free" || hit.mode === "grabbed" ? hit : null;
+}
+
+/** Last seen cursor position, so the physics loop can re-check the hover. */
+let lastPointerX = null;
+let lastPointerY = null;
+
+/**
+ * Runs on every pointer move, whether or not a button is down. A press no
+ * longer cancels anything: the tooltip belongs to "the cursor is on this
+ * image", and pressing does not change that.
  */
 function onHoverMove(event) {
-    if (press) {
-        if (hoveredBody) hideTooltip();
-        return;
-    }
+    lastPointerX = event.clientX;
+    lastPointerY = event.clientY;
 
-    const hit = pickBody(event.clientX, event.clientY);
-    const target = hit && hit.mode === "free" && hit.label ? hit : null;
+    const target = hoverTarget(event.clientX, event.clientY);
 
+    // Already showing for this image: just keep it under the cursor. This is
+    // the branch that makes the reveal play exactly once per visit — nothing
+    // is reset, so the three stages carry on from wherever they had got to.
     if (target === hoveredBody) {
         if (target) positionTooltip(target, event.clientX, event.clientY);
         return;
@@ -1549,6 +1596,27 @@ function onHoverMove(event) {
 
     if (target) showTooltip(target, event.clientX, event.clientY);
     else hideTooltip();
+}
+
+/**
+ * The cursor is not the only thing that can end a hover: an image can leave a
+ * STATIONARY cursor. Drop one and it falls out from under you; the pile shifts
+ * and shoves it aside. No pointermove fires for any of that, so without this
+ * the tooltip would sit there labelling empty space.
+ *
+ * Called once per frame from step(). Deliberately only lets a hover GO, never
+ * acquires a new one — releasing needs a single hit-test on one known body,
+ * where acquiring would mean a full pickBody() every frame forever.
+ */
+function checkHoverStillValid() {
+    if (!hoveredBody || lastPointerX === null) return;
+    if (hoveredBody.mode === "grabbed") return; // drag-locked, see hoverTarget()
+    if (
+        hoveredBody.mode !== "free" ||
+        !hitTest(hoveredBody, lastPointerX, lastPointerY)
+    ) {
+        hideTooltip();
+    }
 }
 
 window.addEventListener("pointermove", onHoverMove, { passive: true });
