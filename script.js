@@ -94,7 +94,16 @@ const IMAGES = [
 	    "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
 	    "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
     },
+    {
+        src: "alphagro.jpg",
+        label: "ALPHAGRO",
+        description:
+            "Alphagro (whose name references “Alpha-go“ [the first AI to master the board game Go]) " +
+            "is a three level board game. As the players work up the levels, battling it out for territory, " +
+	    "they build cities which act as bases from which their territorial expansion occurs.",
+    },
 ];
+
 
 /* ============================================================================
  * 2. TUNING
