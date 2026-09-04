@@ -137,13 +137,16 @@ const CONFIG = {
     /* ---- Description panel (shown under an expanded image) ---- */
     descGap: 24, // px between image and panel, desktop
     descGapMobile: 16, // …and on a small screen (same breakpoint as spawn size)
-    descWidthFraction: 0.75, // panel width, as a fraction of the window
-    /* Same, on a small screen. A narrow panel is a TALL panel, and the image
-       only gets the height the panel leaves over — so on a phone this number
+    /* Panel width CEILING, as a fraction of the window. The panel hugs its
+       own text and only grows out to this when the copy is long enough to
+       need it — a one-line description gets a one-line box. */
+    descMaxWidthFraction: 0.75,
+    /* Same ceiling on a small screen. A narrow panel is a TALL panel, and the
+       image only gets the height the panel leaves over — so on a phone this
        is the main lever on how big the image ends up. Raising it to ~0.9
        gives noticeably more of the screen back to the artwork. Defaults to
        matching desktop. */
-    descWidthFractionMobile: 0.75,
+    descMaxWidthFractionMobile: 0.75,
     descPushFrames: 16, // ≈270ms for the panel to arrive and shove the image up
     focusMargin: 24, // px of clear space kept above and below the whole block
 
@@ -257,10 +260,10 @@ const SPAWN_SCALE = IS_SMALL_SCREEN ? CONFIG.mobileSpawnScale : 1;
 /** Gap between an expanded image and its description panel. */
 const DESC_GAP = IS_SMALL_SCREEN ? CONFIG.descGapMobile : CONFIG.descGap;
 
-/** Panel width, as a fraction of the window. */
-const DESC_WIDTH_FRACTION = IS_SMALL_SCREEN
-    ? CONFIG.descWidthFractionMobile
-    : CONFIG.descWidthFraction;
+/** Panel width ceiling, as a fraction of the window. */
+const DESC_MAX_WIDTH_FRACTION = IS_SMALL_SCREEN
+    ? CONFIG.descMaxWidthFractionMobile
+    : CONFIG.descMaxWidthFraction;
 
 /**
  * The walls. Re-read from the window every frame (rule 1). `prevW/prevH` let
@@ -523,12 +526,14 @@ function addBody(img, opts) {
 
         /* Description panel, shown under this image once it has expanded.
            No `description` means no panel, and the expanded layout collapses
-           back to a plain centred image. `descH`/`descW` are the panel's
-           measured size at the current window width (see measureDescription);
+           back to a plain centred image. `descMaxW` is the width ceiling and
+           `descW`/`descH` are what the panel actually measured out to once it
+           had hugged its own text (see measureDescription);
            `pushRaw` is 0→1 progress through the push (see layoutFocused). */
         description: (opts && opts.description) || null,
         descH: 0,
         descW: 0,
+        descMaxW: 0,
         pushRaw: 0,
         el: null,
         ctx: null,
@@ -677,13 +682,17 @@ document.body.appendChild(descMeasureEl);
  */
 function measureDescription(body) {
     if (!body.description) {
+        body.descMaxW = 0;
         body.descW = 0;
         return 0;
     }
-    const w = Math.round(WORLD.w * DESC_WIDTH_FRACTION);
-    descMeasureEl.style.width = w + "px";
+    /* Give it the ceiling and let CSS decide the rest: `width: max-content`
+       (see .desc) hugs the copy, `max-width` stops it running away. Whatever
+       comes back from offsetWidth is what the box actually wants to be. */
+    body.descMaxW = Math.round(WORLD.w * DESC_MAX_WIDTH_FRACTION);
+    descMeasureEl.style.maxWidth = body.descMaxW + "px";
     descMeasureEl.textContent = body.description;
-    body.descW = w;
+    body.descW = descMeasureEl.offsetWidth;
     return descMeasureEl.offsetHeight;
 }
 
@@ -713,8 +722,8 @@ function layoutFocused(body) {
     body.y = imgTop + dispH / 2 - body.h / 2;
 
     if (body.description) {
-        const w = body.descW + "px";
-        if (descEl.style.width !== w) descEl.style.width = w;
+        const w = body.descMaxW + "px";
+        if (descEl.style.maxWidth !== w) descEl.style.maxWidth = w;
         descEl.style.transform =
             "translate(-50%," + Math.round(imgTop + dispH + gap) + "px)";
         descEl.style.opacity = String(eased);
@@ -845,7 +854,7 @@ function beginExpand(body) {
        and stepPush() starts raising it. */
     if (body.description) {
         descEl.textContent = body.description;
-        descEl.style.width = body.descW + "px";
+        descEl.style.maxWidth = body.descMaxW + "px";
         descEl.style.opacity = "0";
         descEl.style.visibility = "visible";
     }

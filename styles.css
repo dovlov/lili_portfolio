@@ -154,6 +154,18 @@ body {
     left: 50%; /* script.js finishes the centring with translate(-50%, y) */
     z-index: 5001; /* just above the expanded image's FOCUS_Z */
 
+    /* HUG THE TEXT, up to a ceiling. `max-content` is the width the copy
+       would take on a single unbroken line; script.js caps it with an inline
+       `max-width`, so short copy gets a small box and only long copy grows out
+       to the limit and wraps.
+
+       This must be stated explicitly — it cannot be left as `width: auto`. A
+       fixed-position box with `left: 50%` and no `right` shrink-to-fits
+       against the space remaining to its RIGHT, which is half the viewport, so
+       `auto` would quietly cap the panel at 50% of the screen and wrap the
+       text early no matter what max-width said. */
+    width: max-content;
+
     box-sizing: border-box;
     padding: 24px 32px;
     background: #ffffff;
