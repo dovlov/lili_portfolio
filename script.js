@@ -47,10 +47,12 @@
  * Drop an image file into this folder, then add it to this list. Each entry
  * appears exactly once. png / jpg / webp / gif / svg all work.
  *
- * Two ways to write an entry:
- *   "filename.webp"                          — no hover tooltip
- *   { src: "filename.webp", label: "TITLE" }  — hovering the thumbnail shows
- *                                                a tooltip reading TITLE
+ * An entry can be a bare filename, or an object with any of these:
+ *   src         the file (required)
+ *   label       hovering the thumbnail shows a tooltip reading this
+ *   description shown in a panel under the image once it has expanded.
+ *               Leave it out and the image simply expands on its own, with
+ *               no panel and nothing else about the layout changed.
  *
  * Want a tooltip that looks different from the rest (bigger text, a tighter
  * fade, different padding) for just ONE image? Add a `tooltip` object — any
@@ -64,8 +66,28 @@
  * those are temporary and vanish on reload — add them here to keep them.)
  */
 const IMAGES = [
-    { src: "slime_1.webp", label: "SLIME COLLECTIVE" },
-    { src: "slime_2.webp", label: "THE SLIME MOLD HOLD" },
+    {
+        src: "slime_1.webp",
+        label: "SLIME COLLECTIVE",
+        description:
+            "A card came I created with accompanying character and map bits. " +
+            "This game began as an exploration into a fascination of mine: the " +
+            "slime mold. This kind of creature defies the boundaries of fungus " +
+            "or animal, taking a hybrid taxonomical form which crawls along the " +
+            "forest floor. I developed a sprawling and evolving card game which " +
+            "would branch out from central nodes which the player would place " +
+            "early on in the game. This architecture was designed to mimic the " +
+            "growth and spread of slime molds and act as the twofold army and " +
+            "fortress of the player.",
+    },
+    {
+        src: "slime_2.webp",
+        label: "THE SLIME MOLD HOLD",
+        // ↓ placeholder — swap in the real copy for this piece.
+        description:
+            "Packaging and print work for the same world. Replace this text " +
+            "with the description you want under this piece.",
+    },
 ];
 
 /* ============================================================================
@@ -111,6 +133,19 @@ const CONFIG = {
     clickSlop: 6, // px of travel below which a press counts as a click
     clickTime: 450, // ms held below which a press counts as a click
     focusDelay: 600, // ms an incoming image waits for the outgoing one to clear
+
+    /* ---- Description panel (shown under an expanded image) ---- */
+    descGap: 24, // px between image and panel, desktop
+    descGapMobile: 16, // …and on a small screen (same breakpoint as spawn size)
+    descWidthFraction: 0.75, // panel width, as a fraction of the window
+    /* Same, on a small screen. A narrow panel is a TALL panel, and the image
+       only gets the height the panel leaves over — so on a phone this number
+       is the main lever on how big the image ends up. Raising it to ~0.9
+       gives noticeably more of the screen back to the artwork. Defaults to
+       matching desktop. */
+    descWidthFractionMobile: 0.75,
+    descPushFrames: 16, // ≈270ms for the panel to arrive and shove the image up
+    focusMargin: 24, // px of clear space kept above and below the whole block
 
     /* ---- Solver ---- */
     substeps: 8, // integration steps per frame (demo: 10)
@@ -216,8 +251,16 @@ const bodies = [];
  * never written again, so there is no path by which a later resize could
  * reach back and change one.
  */
-const SPAWN_SCALE =
-    window.innerWidth < CONFIG.mobileBreakpoint ? CONFIG.mobileSpawnScale : 1;
+const IS_SMALL_SCREEN = window.innerWidth < CONFIG.mobileBreakpoint;
+const SPAWN_SCALE = IS_SMALL_SCREEN ? CONFIG.mobileSpawnScale : 1;
+
+/** Gap between an expanded image and its description panel. */
+const DESC_GAP = IS_SMALL_SCREEN ? CONFIG.descGapMobile : CONFIG.descGap;
+
+/** Panel width, as a fraction of the window. */
+const DESC_WIDTH_FRACTION = IS_SMALL_SCREEN
+    ? CONFIG.descWidthFractionMobile
+    : CONFIG.descWidthFraction;
 
 /**
  * The walls. Re-read from the window every frame (rule 1). `prevW/prevH` let
@@ -360,9 +403,23 @@ function expandedSize(body) {
        object multiplied by a single zoom factor. So the fit is one number:
        whichever of the two 60% limits is reached first wins, and nothing is
        ever cropped or squashed. */
+    /* A described image shares the screen with its panel, so it can only have
+       the height left over once the panel and the gap have taken theirs. On a
+       wide screen the panel is wide, so it is only a few lines tall and this
+       never binds — the 60% rule wins outright. On a phone the panel is narrow
+       and therefore tall, and without this term the block would simply run off
+       the bottom of the screen. */
+    const gap = body.description ? DESC_GAP : 0;
+    const descH = body.description ? body.descH : 0;
+    const availH = Math.max(
+        40,
+        WORLD.h - CONFIG.focusMargin * 2 - gap - descH
+    );
+
     const zoom = Math.min(
         (WORLD.w * CONFIG.expandFraction) / body.w,
-        (WORLD.h * CONFIG.expandFraction) / body.h
+        (WORLD.h * CONFIG.expandFraction) / body.h,
+        availH / body.h
     );
     const stroke = Math.max(1, CONFIG.strokeWidth * zoom);
     const imgW = Math.max(8, Math.round(body.baseImgW * zoom));
@@ -463,6 +520,16 @@ function addBody(img, opts) {
                 ? Object.assign({}, CONFIG.tooltip, opts.tooltip || {})
                 : null,
         tooltipWidth: null,
+
+        /* Description panel, shown under this image once it has expanded.
+           No `description` means no panel, and the expanded layout collapses
+           back to a plain centred image. `descH`/`descW` are the panel's
+           measured size at the current window width (see measureDescription);
+           `pushRaw` is 0→1 progress through the push (see layoutFocused). */
+        description: (opts && opts.description) || null,
+        descH: 0,
+        descW: 0,
+        pushRaw: 0,
         el: null,
         ctx: null,
         dpr: 1,
@@ -578,6 +645,92 @@ function overlapsAny(body) {
  *                        back on, and gravity drops it onto the pile
  */
 
+/* --- The description panel -------------------------------------------------
+ * One element, reused by whichever image is open (only one can be). It stays
+ * in the DOM permanently and is hidden with `visibility` rather than
+ * `display: none`, because a display:none box has no layout and cannot be
+ * measured — and measuring it is the first thing the expanded arrangement
+ * needs, since the image can only take the height the panel leaves over.
+ * ------------------------------------------------------------------------- */
+
+const descEl = document.createElement("div");
+descEl.className = "desc";
+document.body.appendChild(descEl);
+
+/* A second, permanently-hidden copy, used ONLY for measuring. Measuring on
+   the live panel would mean writing the incoming image's text into it to get
+   a height — and when one image is clicked while another is still closing,
+   that would swap the outgoing panel's words mid-fade. Measuring somewhere
+   else makes that race impossible rather than merely unlikely. */
+const descMeasureEl = document.createElement("div");
+descMeasureEl.className = "desc";
+document.body.appendChild(descMeasureEl);
+
+/**
+ * Lay the panel out for `body` at the current window width and measure it.
+ * Returns 0 for an image with no description, which collapses everything
+ * below back to "just the image, centred" — exactly the old behaviour.
+ *
+ * Deliberately NOT called every frame: reading offsetHeight forces a
+ * synchronous layout. The height only changes when the text or the window
+ * width changes, so it is cached on the body and refreshed at those moments.
+ */
+function measureDescription(body) {
+    if (!body.description) {
+        body.descW = 0;
+        return 0;
+    }
+    const w = Math.round(WORLD.w * DESC_WIDTH_FRACTION);
+    descMeasureEl.style.width = w + "px";
+    descMeasureEl.textContent = body.description;
+    body.descW = w;
+    return descMeasureEl.offsetHeight;
+}
+
+/**
+ * Park a focused image so that [image + gap + panel] sits centred on screen
+ * as ONE block, and put the panel directly under it.
+ *
+ * `pushRaw` is how far into that arrangement we are: 0 is the image centred
+ * on its own — exactly where the zoom leaves it, and exactly what an image
+ * with no description does forever — and 1 is the full block. The animation
+ * between the two IS the push: the image rises, and the panel, which is
+ * always pinned `gap` below the image, rises into place with it.
+ */
+function layoutFocused(body) {
+    const dispH = body.mountedH * body.scale;
+    const gap = body.description ? DESC_GAP : 0;
+    const descH = body.description ? body.descH : 0;
+
+    const soloTop = (WORLD.h - dispH) / 2; // image centred alone
+    const blockTop = (WORLD.h - (dispH + gap + descH)) / 2; // whole block centred
+    const eased = easeInOutCubic(body.pushRaw);
+    const imgTop = lerp(soloTop, blockTop, eased);
+
+    body.x = WORLD.w / 2 - body.w / 2;
+    /* body.y is the PHYSICS box, and the canvas is drawn centred on it — so
+       convert the image's visual top back into a physics-box top. */
+    body.y = imgTop + dispH / 2 - body.h / 2;
+
+    if (body.description) {
+        const w = body.descW + "px";
+        if (descEl.style.width !== w) descEl.style.width = w;
+        descEl.style.transform =
+            "translate(-50%," + Math.round(imgTop + dispH + gap) + "px)";
+        descEl.style.opacity = String(eased);
+    }
+}
+
+/** Advance `pushRaw` toward wherever this mode wants it. */
+function stepPush(body, frameScale) {
+    // The panel only arrives once the image has reached full size — during
+    // the zoom itself, and all the way back down, the target is 0.
+    const target = body.mode === "expanded" && body.description ? 1 : 0;
+    const rate = frameScale / CONFIG.descPushFrames;
+    if (body.pushRaw < target) body.pushRaw = Math.min(target, body.pushRaw + rate);
+    else if (body.pushRaw > target) body.pushRaw = Math.max(target, body.pushRaw - rate);
+}
+
 /**
  * Stand an image down from being the focused one, whatever stage it's at.
  * A flight that never arrived is simply abandoned — the image becomes an
@@ -638,6 +791,11 @@ function startFlight(body) {
     bodies.splice(bodies.indexOf(body), 1);
     bodies.push(body);
 
+    /* Measure the panel BEFORE baking: the bake size depends on how much
+       height the panel leaves over (see expandedSize), so getting these the
+       wrong way round would bake the image at a size it can't actually have. */
+    body.descH = measureDescription(body);
+
     /* Bake the expanded bitmap NOW rather than on arrival. It costs a few ms,
        and a dropped frame at the very start of the flight is invisible where
        one at the moment the zoom begins would not be. */
@@ -680,6 +838,23 @@ function beginExpand(body) {
 
     body.el.style.zIndex = String(FOCUS_Z); // ← now above every other image
     body.el.classList.add("is-focused");
+
+    /* Hand the panel its text now, not at flight time: by this point any
+       previously-open panel has finished closing, so nothing can be swapped
+       out from under a fade. It stays at opacity 0 until the zoom finishes
+       and stepPush() starts raising it. */
+    if (body.description) {
+        descEl.textContent = body.description;
+        descEl.style.width = body.descW + "px";
+        descEl.style.opacity = "0";
+        descEl.style.visibility = "visible";
+    }
+
+    /* Put the panel where it belongs before the browser can paint, rather
+       than leaving it at a default transform for a frame — same discipline as
+       mountCanvas(). At pushRaw = 0 this reproduces the centring above
+       exactly, so nothing about the image moves. */
+    layoutFocused(body);
 }
 
 /** Bake the expanded bitmap if it's missing or the window has changed size. */
@@ -732,6 +907,10 @@ function finishCollapse(body) {
     body.el.classList.remove("is-busy", "is-focused");
     // (z-index already returned to the normal band by collapseBody)
 
+    // The panel has already faded to 0 alongside the shrink; park it.
+    body.pushRaw = 0;
+    if (body.description) descEl.style.visibility = "hidden";
+
     body.vx = 0;
     body.vy = 0;
 
@@ -782,9 +961,11 @@ function updateFocus(body, frameScale, now) {
                     : easeInOutCubic(body.t);
             body.scale = lerp(body.fromScale, body.toScale, eased);
 
-            // Stay pinned to the centre even if the window is being resized.
-            body.x = cx - body.w / 2;
-            body.y = cy - body.h / 2;
+            /* Stay centred even if the window is being resized. On the way
+               back down `pushRaw` is falling to 0, so the image slides back
+               to dead centre as it shrinks rather than snapping there. */
+            stepPush(body, frameScale);
+            layoutFocused(body);
 
             if (body.t >= 1) {
                 if (body.mode === "expanding") {
@@ -799,8 +980,15 @@ function updateFocus(body, frameScale, now) {
         }
 
         case "expanded": {
-            body.x = cx - body.w / 2;
-            body.y = cy - body.h / 2;
+            /* The panel's height is a function of the window WIDTH, so it only
+               needs re-measuring on a frame where the width actually moved.
+               Doing it unconditionally would force a synchronous layout on
+               every single frame for no reason. */
+            if (WORLD.w !== WORLD.prevW) body.descH = measureDescription(body);
+
+            // This is where the push happens: full size reached, panel arrives.
+            stepPush(body, frameScale);
+            layoutFocused(body);
 
             /* Resizing the window while an image is open: track the new 60%
                fit immediately with a cheap scale, then re-bake once the
@@ -1098,9 +1286,11 @@ function step(now) {
             continue;
         }
         if (body.mode !== "free") {
-            // A parked expanded image is static and must not hold the loop
-            // open — unless it still owes a re-bake after a resize.
+            /* A parked expanded image is static and must not hold the loop
+               open — unless it still owes a re-bake after a resize, or its
+               description panel is still sliding into place. */
             if (body.rebakeAt) moving = true;
+            if (body.pushRaw > 0 && body.pushRaw < 1) moving = true;
             continue;
         }
 

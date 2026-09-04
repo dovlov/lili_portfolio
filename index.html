@@ -18,8 +18,13 @@
 </head>
 <body>
 
-<!-- Page title. pointer-events:none in CSS so it never blocks a grab. -->
-<h1 class="site-title">LILIANA APODACA &lt;:^~)</h1>
+<!--
+  Page title. pointer-events:none in CSS so it never blocks a grab.
+  The face stays INSIDE the <h1> so the heading still reads as one name to a
+  screen reader — it is only pulled to the opposite corner visually, by being
+  position:fixed in its own right (a fixed child escapes its parent's box).
+-->
+<h1 class="site-title">LILIANA APODACA<span class="site-face">&lt;:^~)</span></h1>
 
 <!--
   Every image becomes a <canvas class="sticker"> appended in here by script.js.

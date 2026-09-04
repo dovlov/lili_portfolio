@@ -50,6 +50,33 @@ body {
     pointer-events: none;
 }
 
+/* The face, pinned to the opposite corner. Still a child of the <h1> for
+   semantics; `position: fixed` takes it out of the heading's flow entirely,
+   so the two read as one name but sit at either end of the screen. */
+.site-face {
+    position: fixed;
+    top: 34px;
+    right: 40px;
+    left: auto;
+    pointer-events: none;
+}
+
+/* Narrow screens: the name and the face are heading for each other, so pull
+   the type down and tighten the insets before they can collide. */
+@media (max-width: 560px) {
+    .site-title,
+    .site-face {
+        top: 22px;
+        font-size: 22px;
+    }
+    .site-title {
+        left: 20px;
+    }
+    .site-face {
+        right: 20px;
+    }
+}
+
 /* --------------------------------------------------------------------------
    Stage + stickers
    -------------------------------------------------------------------------- */
@@ -106,6 +133,51 @@ body {
    shouldn't advertise otherwise. */
 .sticker.is-busy {
     cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Description panel
+   --------------------------------------------------------------------------
+   Shown under an image once it has finished expanding. script.js owns its
+   width, its vertical position and its opacity — everything here is look, not
+   layout, so this block is safe to restyle freely.
+
+   It is hidden with `visibility`, never `display: none`. A display:none
+   element has no layout box and its height cannot be measured, and its height
+   is precisely what the expanded arrangement has to be computed from before
+   anything is drawn. `visibility: hidden` keeps the box measurable.
+   -------------------------------------------------------------------------- */
+
+.desc {
+    position: fixed;
+    top: 0;
+    left: 50%; /* script.js finishes the centring with translate(-50%, y) */
+    z-index: 5001; /* just above the expanded image's FOCUS_Z */
+
+    box-sizing: border-box;
+    padding: 24px 32px;
+    background: #ffffff;
+    border: 4px solid var(--ink);
+
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--ink);
+
+    visibility: hidden;
+    opacity: 0;
+    /* Never intercept anything: a click anywhere off the image still closes
+       it, and the panel must not become a dead zone in the middle of that. */
+    pointer-events: none;
+    will-change: transform, opacity;
+}
+
+@media (max-width: 700px) {
+    .desc {
+        padding: 18px 20px;
+        font-size: 15px;
+        line-height: 1.45;
+    }
 }
 
 /* --------------------------------------------------------------------------
