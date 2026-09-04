@@ -77,12 +77,13 @@ const IMAGES = [
             "growth and spread of slime molds.",
     },
     {
-        src: "slime_2.webp",
-        label: "THE SLIME MOLD HOLD",
-        // ↓ placeholder — swap in the real copy for this piece.
+        src: "pleina.png",
+        label: "PLEINA – AN IOS APP",
         description:
-            "Packaging and print work for the same world. Replace this text " +
-            "with the description you want under this piece.",
+            "Pleina is a functioning AI planning app for IOS that I designed and developed. " +
+            "Users fill out an interest profile, enter a prompt, and the app generates step " +
+	    "by step instructions, with accompanying directions produced via an integrated map API, " +
+	    "to help Users accomplish their request or meet their goal.",
     },
 ];
 
