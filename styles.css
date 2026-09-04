@@ -1,0 +1,130 @@
+/* ==========================================================================
+   lili_portfolio — styles
+   --------------------------------------------------------------------------
+   Layout here is deliberately thin. Every sticker is positioned by
+   script.js writing a `transform: translate3d(...)`, never by CSS `left/top`
+   — transforms are composited on the GPU and don't trigger layout, which is
+   what keeps 20 images at 60fps.
+   ========================================================================== */
+
+:root {
+    --paper: #f7f7f5; /* off-white page ground */
+    --ink: #000000;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden; /* the window IS the world — never scroll it */
+    background: #FAFAFA;
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, -apple-system,
+        BlinkMacSystemFont, sans-serif;
+    /* Stop iOS/Safari rubber-band and text selection during drags. */
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Title
+   -------------------------------------------------------------------------- */
+
+.site-title {
+    position: fixed;
+    top: 34px;
+    left: 40px;
+    z-index: 0; /* stickers sit above it */
+    margin: 0;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    /* Critical: the heading must never swallow a pointerdown, or images
+       behind it become ungrabbable. */
+    pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Stage + stickers
+   -------------------------------------------------------------------------- */
+
+.stage {
+    position: fixed;
+    inset: 0;
+    /* The stage itself is inert; script.js hit-tests stickers manually so it
+       can respect each image's transparency instead of its bounding box. */
+    pointer-events: none;
+}
+
+.sticker {
+    position: fixed;
+    top: 0;
+    left: 0;
+    /* Everything is driven from transform, so the browser can skip layout. */
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+    cursor: grab;
+    /* Required: without this, a touch-drag scrolls the page instead. */
+    touch-action: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    /* Re-enabled here because .stage turned it off. */
+    pointer-events: auto;
+}
+
+.sticker.is-held {
+    cursor: grabbing;
+}
+
+/* The one expanded image: a second click (or Escape, or a click on the
+   background) sends it back to the pile. */
+.sticker.is-focused {
+    cursor: zoom-out;
+}
+
+/* Mid-flight / mid-zoom. Input is ignored during transitions, so the cursor
+   shouldn't advertise otherwise. */
+.sticker.is-busy {
+    cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Drag-and-drop hint overlay
+   -------------------------------------------------------------------------- */
+
+.drop-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background: rgba(247, 247, 245, 0.82);
+    border: 4px dashed var(--ink);
+    pointer-events: none;
+}
+
+.drop-hint[hidden] {
+    display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Respect the OS "reduce motion" setting: script.js reads this via
+   matchMedia and parks everything instead of simulating.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    .sticker {
+        will-change: auto;
+    }
+}
