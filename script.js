@@ -72,13 +72,9 @@ const IMAGES = [
         description:
             "A card came I created with accompanying character and map bits. " +
             "This game began as an exploration into a fascination of mine: the " +
-            "slime mold. This kind of creature defies the boundaries of fungus " +
-            "or animal, taking a hybrid taxonomical form which crawls along the " +
-            "forest floor. I developed a sprawling and evolving card game which " +
-            "would branch out from central nodes which the player would place " +
-            "early on in the game. This architecture was designed to mimic the " +
-            "growth and spread of slime molds and act as the twofold army and " +
-            "fortress of the player.",
+            "slime mold. I developed a sprawling and evolving card game which " +
+            "would branch out from central nodes. This design was meant to mimic the " +
+            "growth and spread of slime molds.",
     },
     {
         src: "slime_2.webp",
