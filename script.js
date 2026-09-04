@@ -85,8 +85,7 @@ const IMAGES = [
         label: "THE SLIME MOLD HOLD",
         // ↓ placeholder — swap in the real copy for this piece.
         description:
-            "Packaging and print work for the same world. Replace this text " +
-            "with the description you want under this piece.",
+            "Packaging and print work for the same world.",
     },
 ];
 
