@@ -190,7 +190,7 @@ const CONFIG = {
         letterSpacing: "normal",
         // The box is CENTRED on the cursor horizontally; this is the clear
         // space between the cursor and the box's top edge.
-        cursorGap: 16,
+        cursorGap: 24,
         edgeMargin: 12, // never rendered closer than this to a window edge
     },
 };
