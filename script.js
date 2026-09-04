@@ -78,6 +78,14 @@ const CONFIG = {
     strokeWidth: 4, // the 4pt black outline
     strokeColor: "#000000",
 
+    /* ---- Small screens ----
+       Read ONCE, at page load, and never again. See SPAWN_SCALE in section 4
+       for why that matters. To preview the small-screen sizing on a desktop,
+       narrow the window below the breakpoint and RELOAD — narrowing alone
+       will (deliberately) do nothing. */
+    mobileBreakpoint: 700, // px of window width at load…
+    mobileSpawnScale: 0.5, // …under which images spawn at half their usual size
+
     /* ---- Motion (the demo's sliders) ---- */
     gravity: 0.5, // px/frame². Demo equivalent: g * tilt.y = 3 * 0.1
     wallBounce: 0.55, // the demo's `vd` (it ships 0.95 — bouncier)
@@ -190,6 +198,26 @@ const reduceMotion =
 
 /** Every image in the simulation, in back-to-front paint order. */
 const bodies = [];
+
+/**
+ * How big images spawn, relative to their usual random size. Phones get half
+ * scale so a sensible number of images fit on a narrow screen.
+ *
+ * THE WHOLE POINT IS THAT THIS IS A CONSTANT, decided once from the window
+ * width at load and then frozen for the session. Resizing must never resize
+ * an image: dragging a desktop window narrow is something you do WITH the
+ * toy — the walls close in and shove the pile around (see the resize shove in
+ * step()) — and having the pieces silently change size mid-play would break
+ * that. A phone gets small images because it was a phone when it loaded, not
+ * because the window is narrow right now.
+ *
+ * This is the only thing that reads the breakpoint, and `addBody` is the only
+ * thing that reads this. An image's `w`/`h` are set once when it is built and
+ * never written again, so there is no path by which a later resize could
+ * reach back and change one.
+ */
+const SPAWN_SCALE =
+    window.innerWidth < CONFIG.mobileBreakpoint ? CONFIG.mobileSpawnScale : 1;
 
 /**
  * The walls. Re-read from the window every frame (rule 1). `prevW/prevH` let
@@ -406,7 +434,15 @@ function writeTransform(body) {
  * so the image is never distorted.
  */
 function addBody(img, opts) {
-    const targetW = Math.round(rand(CONFIG.minWidth, CONFIG.maxWidth));
+    /* SPAWN_SCALE is the small-screen halving (section 4) — a session-long
+       constant, so images added later by drag-and-drop match the ones that
+       loaded with the page. The stroke is deliberately NOT scaled with it:
+       every thumbnail wears the same 4px outline regardless of how big it is,
+       on any screen. (Halve CONFIG.strokeWidth if you'd rather it read
+       lighter on phones.) */
+    const targetW = Math.round(
+        rand(CONFIG.minWidth, CONFIG.maxWidth) * SPAWN_SCALE
+    );
     const ratio = img.naturalHeight / img.naturalWidth || 1;
     const targetH = Math.round(targetW * ratio);
 
