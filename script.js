@@ -82,8 +82,8 @@ const IMAGES = [
         description:
             "Pleina is a functioning AI planning app for IOS that I designed & developed. " +
             "Users fill out an interest profile, enter a prompt, & the app generates step " +
-	    "by step instructions, with accompanying directions produced via an integrated map API, " +
-	    "to help Users accomplish their request or meet their goal.",
+            "by step instructions, with accompanying directions produced via an integrated map API, " +
+            "to help Users accomplish their request or meet their goal.",
     },
     {
         src: "goodr.png",
@@ -91,8 +91,8 @@ const IMAGES = [
         description:
             "I've been at goodr for the past 2.5 years doing UX Design, Research, & Management. " +
             "My main focus at the company has been conversion rate optimization via UX changes.  " +
-	    "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
-	    "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
+            "I lead a team of Designers and Developers who help me execute against my hypotheses. " +
+            "IMPACT: A/B tests I've conducted have resulted in significant lifts in CVR & compounding revenue gains YoY.",
     },
     {
         src: "alphagro.jpg",
@@ -100,7 +100,7 @@ const IMAGES = [
         description:
             "Alphagro (whose name references “Alpha-go“ [the first AI to master the board game Go]) " +
             "is a three level board game. As the players work up the levels, battling it out for territory, " +
-	    "they build cities which act as bases from which their territorial expansion occurs.",
+            "they build cities which act as bases from which their territorial expansion occurs.",
     },
     {
         src: "sb.png",
@@ -108,7 +108,7 @@ const IMAGES = [
         description:
             "As a part of my work with Dolphin.Limited I joined the team creating and spearheaded the design of " +
             "Jonah Hill’s Strong Baby Productions web platform. The web platform serves as a hub for media and news " +
-	    "about past and upcoming films. It also hosts a bespoke shopping experience: offering a line of street wear to users.",
+            "about past and upcoming films. It also hosts a bespoke shopping experience: offering a line of street wear to users.",
     },
 ];
 
@@ -150,7 +150,8 @@ const CONFIG = {
     resizeShove: 1, // how much of a closing wall's speed transfers to a body
 
     /* ---- Click to expand ---- */
-    expandFraction: 0.6, // expanded size fits inside 60% of width AND height
+    expandFraction: 0.6, // expanded IMAGE fits inside 60% of width AND height
+    expandFractionMobile: 0.85, // …85% on a phone, where screen space is scarce
     flightChase: 0.24, // chase gain on the trip to centre — lower = statelier
     flightMinSpeed: 1.5, // px/frame floor, so the approach never crawls
     flightTimeout: 150, // frames before arrival is forced (safety net)
@@ -174,7 +175,14 @@ const CONFIG = {
        matching desktop. */
     descMaxWidthFractionMobile: 0.75,
     descPushFrames: 16, // ≈270ms for the panel to arrive and shove the image up
-    focusMargin: 24, // px of clear space kept above and below the whole block
+    /* Ceiling on the WHOLE block — image + gap + panel — as a fraction of the
+       window height. This is what stops a tall image from growing until it
+       shoves its own description off the bottom of the screen: the image can
+       only ever have the height this leaves once the panel has taken its
+       share. It replaces the old fixed `focusMargin`, which was a flat 24px
+       and far too loose to protect a portrait image on a phone. */
+    blockMaxHeightFraction: 0.8,
+    blockMaxHeightFractionMobile: 0.8,
 
     /* ---- Solver ---- */
     substeps: 8, // integration steps per frame (demo: 10)
@@ -285,6 +293,16 @@ const SPAWN_SCALE = IS_SMALL_SCREEN ? CONFIG.mobileSpawnScale : 1;
 
 /** Gap between an expanded image and its description panel. */
 const DESC_GAP = IS_SMALL_SCREEN ? CONFIG.descGapMobile : CONFIG.descGap;
+
+/** How much of the window an expanded image may fill, per axis. */
+const EXPAND_FRACTION = IS_SMALL_SCREEN
+    ? CONFIG.expandFractionMobile
+    : CONFIG.expandFraction;
+
+/** Ceiling on the whole [image + gap + panel] block, as a fraction of height. */
+const BLOCK_MAX_H_FRACTION = IS_SMALL_SCREEN
+    ? CONFIG.blockMaxHeightFractionMobile
+    : CONFIG.blockMaxHeightFraction;
 
 /** Whether hover tooltips run at all this session. See CONFIG.mobileTooltips. */
 const TOOLTIPS_ENABLED = !IS_SMALL_SCREEN || CONFIG.mobileTooltips;
@@ -423,35 +441,36 @@ function loadImage(src) {
 }
 
 /**
- * The expanded size for a body: the largest box with the image's aspect ratio
- * that fits inside `expandFraction` of BOTH the window width and height.
+ * The expanded size for a body: the largest box with the image's own aspect
+ * ratio that satisfies all THREE ceilings below at once.
  *
- * Fitting to whichever limit is hit first is the whole point — a tall image
- * is capped by height, a wide one by width, and neither is ever cropped or
- * squashed. Stroke padding is included so the *visible* object honours 60%.
+ * Because the stroke scales with the image too, the expanded object is just
+ * the thumbnail multiplied by a single zoom factor — so the whole fit reduces
+ * to one number, whichever ceiling is reached first wins, and nothing is ever
+ * cropped or squashed.
  */
 function expandedSize(body) {
-    /* Because the stroke scales too, the expanded object is just the thumbnail
-       object multiplied by a single zoom factor. So the fit is one number:
-       whichever of the two 60% limits is reached first wins, and nothing is
-       ever cropped or squashed. */
-    /* A described image shares the screen with its panel, so it can only have
-       the height left over once the panel and the gap have taken theirs. On a
-       wide screen the panel is wide, so it is only a few lines tall and this
-       never binds — the 60% rule wins outright. On a phone the panel is narrow
-       and therefore tall, and without this term the block would simply run off
-       the bottom of the screen. */
     const gap = body.description ? DESC_GAP : 0;
     const descH = body.description ? body.descH : 0;
+
+    /* Ceiling 3, and the one that does the real work on a phone: the WHOLE
+       block — image, gap and panel — is capped as a fraction of the window
+       height, so the image only gets what the panel leaves over.
+
+       This is what protects a tall image from itself. A portrait piece hits
+       the width ceiling with plenty of height to spare, keeps growing, and
+       would happily shove its own description off the bottom of the screen;
+       here it simply stops instead. On a wide screen the panel is wide, so
+       only a few lines tall, and this rarely binds at all. */
     const availH = Math.max(
         40,
-        WORLD.h - CONFIG.focusMargin * 2 - gap - descH
+        WORLD.h * BLOCK_MAX_H_FRACTION - gap - descH
     );
 
     const zoom = Math.min(
-        (WORLD.w * CONFIG.expandFraction) / body.w,
-        (WORLD.h * CONFIG.expandFraction) / body.h,
-        availH / body.h
+        (WORLD.w * EXPAND_FRACTION) / body.w, // 1. width of the window
+        (WORLD.h * EXPAND_FRACTION) / body.h, // 2. height of the window
+        availH / body.h // 3. height left after the panel
     );
     const stroke = Math.max(1, CONFIG.strokeWidth * zoom);
     const imgW = Math.max(8, Math.round(body.baseImgW * zoom));
@@ -672,7 +691,7 @@ function overlapsAny(body) {
  *                        through out of the way
  *          ──▶ expanding on arrival its z-index jumps above everything, it
  *                        leaves the collision set, and it scales up to fit
- *                        60% of the window
+ *                        its share of the window
  *          ──▶ expanded  parked, centred, on top
  *   click ──▶ collapsing scales back to thumbnail size at the centre
  *          ──▶ free      z-index returns to the normal band, collisions come
@@ -1028,7 +1047,7 @@ function updateFocus(body, frameScale, now) {
             stepPush(body, frameScale);
             layoutFocused(body);
 
-            /* Resizing the window while an image is open: track the new 60%
+            /* Resizing the window while an image is open: track the new
                fit immediately with a cheap scale, then re-bake once the
                resize goes quiet so the outline returns to a true 4px.
                Re-baking on every resize frame would be far too slow. */
