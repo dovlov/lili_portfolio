@@ -102,8 +102,15 @@ const IMAGES = [
             "is a three level board game. As the players work up the levels, battling it out for territory, " +
 	    "they build cities which act as bases from which their territorial expansion occurs.",
     },
+    {
+        src: "sb.png",
+        label: "STRONG BABY PRODUCTIONS",
+        description:
+            "As a part of my work with Dolphin.Limited I joined the team creating, and spearheaded the design of, " +
+            "Jonah Hill’s Strong Baby Productions web platform. The web platform serves as a hub for media and news " +
+	    "about past and upcoming films. It also hosts a bespoke shopping experience: offering a line of street wear to users.",
+    },
 ];
-
 
 /* ============================================================================
  * 2. TUNING
